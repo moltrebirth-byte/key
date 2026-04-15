@@ -9,6 +9,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import java.io.File
+import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -28,6 +29,7 @@ class MainActivity : AppCompatActivity() {
         val refreshButton = findViewById<Button>(R.id.refreshInfoButton)
         val exportLogsButton = findViewById<Button>(R.id.exportLogsButton)
         val openDevSettingsButton = findViewById<Button>(R.id.openDevSettingsButton)
+        val captureLogcatButton = findViewById<Button>(R.id.captureLogcatButton)
 
         refreshButton.setOnClickListener {
             renderDeviceInfo()
@@ -41,6 +43,10 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
         }
 
+        captureLogcatButton.setOnClickListener {
+            captureRealLogcat()
+        }
+
         renderDeviceInfo()
     }
 
@@ -51,6 +57,8 @@ class MainActivity : AppCompatActivity() {
             appendLine("Device: ${Build.DEVICE}")
             appendLine("Android Version: ${Build.VERSION.RELEASE}")
             appendLine("SDK: ${Build.VERSION.SDK_INT}")
+            appendLine("Hardware: ${Build.HARDWARE}")
+            appendLine("Board: ${Build.BOARD}")
         }
         deviceInfoText.text = info
         statusText.text = getString(R.string.status_ready)
@@ -76,5 +84,31 @@ class MainActivity : AppCompatActivity() {
         outFile.writeText(content)
         statusText.text = "Exported: ${outFile.absolutePath}"
         Toast.makeText(this, "Export saved", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun captureRealLogcat() {
+        Thread {
+            try {
+                val process = Runtime.getRuntime().exec("logcat -d -t 500")
+                val reader = InputStreamReader(process.inputStream)
+                val logOutput = reader.readText()
+                
+                val dir = File(filesDir, "logs")
+                if (!dir.exists()) dir.mkdirs()
+                
+                val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+                val outFile = File(dir, "logcat-$stamp.txt")
+                outFile.writeText(logOutput)
+                
+                runOnUiThread {
+                    statusText.text = "Logcat saved: ${outFile.absolutePath}"
+                    Toast.makeText(this@MainActivity, "Logcat captured", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    statusText.text = "Error capturing logcat: ${e.message}"
+                }
+            }
+        }.start()
     }
 }

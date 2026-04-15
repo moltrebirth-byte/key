@@ -11,5 +11,12 @@ adb get-state >/dev/null 2>&1 || {
   exit 1
 }
 
-adb logcat -d > "$OUT_FILE"
+FILTER="${1:-}"
+if [[ -n "$FILTER" ]]; then
+  echo "Pulling logs with filter: $FILTER"
+  adb logcat -d | grep -i "$FILTER" > "$OUT_FILE"
+else
+  adb logcat -d > "$OUT_FILE"
+fi
+
 echo "Saved logs to $OUT_FILE"

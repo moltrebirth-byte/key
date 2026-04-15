@@ -51,6 +51,16 @@
             app:layout_constraintTop_toBottomOf="@id/refreshInfoButton" />
 
         <Button
+            android:id="@+id/captureLogcatButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Capture Real Logcat"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/exportLogsButton" />
+
+        <Button
             android:id="@+id/openDevSettingsButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -58,7 +68,7 @@
             android:text="Open Developer Settings"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/exportLogsButton" />
+            app:layout_constraintTop_toBottomOf="@id/captureLogcatButton" />
 
         <TextView
             android:id="@+id/statusText"
