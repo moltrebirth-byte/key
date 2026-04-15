@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Android QA Toolkit</string>
+    <string name="status_ready">Ready</string>
+</resources>
