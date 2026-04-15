@@ -1,25 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.jack.sysinfo">
+    package="com.jack.batteryopt">
 
-    <!-- No special permissions needed for basic battery and uptime querying. -->
+    <!-- Required to run a foreground service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Required for Android 14+ to specify service type. Using specialUse or dataSync is typical here. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    
+    <!-- Required to show the foreground service notification on Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- Required to see which apps are being used (must be granted via Settings) -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" xmlns:tools="http://schemas.android.com/tools" />
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="SysInfo"
+        android:label="Battery Optimizer"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SysInfo">
+        android:theme="@style/Theme.BatteryOpt">
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.SysInfo">
+            android:theme="@style/Theme.BatteryOpt">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Register the service and declare its foreground type for Android 14+ -->
+        <service
+            android:name=".BatteryMonitorService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+            
     </application>
 
 </manifest>
