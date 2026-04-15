@@ -6,11 +6,11 @@ import sys
 import time
 
 # =========================================================================
-# Standalone Fuzzer Demonstration Script
-# This script demonstrates the mechanics of mutation-based fuzzing.
-# It generates malformed files by applying random mutations to a valid corpus
-# and feeds them to a DUMMY target program.
-# It DOES NOT include an actual APE decoder or target any real software.
+# Standalone Fuzzer Demonstration Script - Structure-Aware Concepts
+# This script demonstrates how a fuzzer might apply mutations to specific
+# structural elements of a file format (like APE).
+# It DOES NOT target an actual decoder (MAC or libape). It still uses the
+# dummy target for demonstration purposes.
 # =========================================================================
 
 CORPUS_DIR = "corpus_ape"
@@ -22,7 +22,7 @@ def setup():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(CRASH_DIR, exist_ok=True)
     
-    # Create a dummy target program that crashes randomly for demonstration
+    # Dummy target program
     with open("dummy_decoder.c", "w") as f:
         f.write("""
 #include <stdio.h>
@@ -54,30 +54,44 @@ int main(int argc, char *argv[]) {
         """)
     subprocess.run(["gcc", "dummy_decoder.c", "-o", DUMMY_TARGET])
 
-def mutate(data):
-    """Applies random mutations to a byte array."""
+def mutate_structure_aware(data):
+    """
+    Demonstrates structure-aware mutations.
+    Instead of randomly flipping bits anywhere, it targets specific offsets
+    known to correspond to structural fields (e.g., in an APE header).
+    """
     mutated = bytearray(data)
-    num_mutations = random.randint(1, 5)
     
-    for _ in range(num_mutations):
-        mutation_type = random.choice(["bitflip", "byte_overwrite", "magic_value"])
+    # APE Descriptor is typically 52 bytes.
+    # APE Header follows immediately after.
+    
+    mutation_strategy = random.choice(["random", "target_descriptor", "target_header"])
+    
+    if mutation_strategy == "target_descriptor" and len(mutated) >= 52:
+        # Target the descriptorBytes field (offset 6, 4 bytes)
+        # Mutating size fields often leads to integer overflows or OOB reads
+        offset = 6
+        mutated[offset] = 0xFF
+        mutated[offset+1] = 0xFF
+        mutated[offset+2] = 0xFF
+        mutated[offset+3] = 0xFF # Set to max uint32
         
-        if len(mutated) == 0:
-            continue
-            
-        idx = random.randint(0, len(mutated) - 1)
+    elif mutation_strategy == "target_header" and len(mutated) >= 76:
+        # Target the blocksPerFrame field in the header (offset 52 + 4 = 56, 4 bytes)
+        offset = 56
+        # Insert a negative value or 0 to test divide-by-zero or allocation logic
+        mutated[offset] = 0x00
+        mutated[offset+1] = 0x00
+        mutated[offset+2] = 0x00
+        mutated[offset+3] = 0x00
         
-        if mutation_type == "bitflip":
-            bit = 1 << random.randint(0, 7)
-            mutated[idx] ^= bit
-        elif mutation_type == "byte_overwrite":
-            mutated[idx] = random.randint(0, 255)
-        elif mutation_type == "magic_value":
-            # Insert potentially problematic values (e.g., max int, negative numbers)
-            magic_vals = [0xFF, 0x00, 0x7F, 0x80]
-            mutated[idx] = random.choice(magic_vals)
+    else:
+        # Fallback to random mutation
+        if len(mutated) > 0:
+            idx = random.randint(0, len(mutated) - 1)
+            mutated[idx] ^= (1 << random.randint(0, 7))
             
-    return mutated
+    return mutated, mutation_strategy
 
 def fuzz():
     corpus_files = [os.path.join(CORPUS_DIR, f) for f in os.listdir(CORPUS_DIR) if os.path.isfile(os.path.join(CORPUS_DIR, f))]
@@ -89,36 +103,38 @@ def fuzz():
     iteration = 0
     crashes = 0
     
+    # Basic statistics tracking
+    stats = {
+        "random": {"attempts": 0, "crashes": 0},
+        "target_descriptor": {"attempts": 0, "crashes": 0},
+        "target_header": {"attempts": 0, "crashes": 0}
+    }
+    
     try:
         while True:
             iteration += 1
             
-            # 1. Select a random file from the corpus
             seed_file = random.choice(corpus_files)
             with open(seed_file, "rb") as f:
                 seed_data = f.read()
                 
-            # 2. Mutate the data
-            mutated_data = mutate(seed_data)
+            mutated_data, strategy = mutate_structure_aware(seed_data)
+            stats[strategy]["attempts"] += 1
             
-            # 3. Write the mutated data to a temporary file
             test_file = os.path.join(OUTPUT_DIR, f"test_{iteration}.ape")
             with open(test_file, "wb") as f:
                 f.write(mutated_data)
                 
-            # 4. Execute the target program with the mutated file
             try:
-                # We use a timeout to catch infinite loops
                 result = subprocess.run([DUMMY_TARGET, test_file], capture_output=True, timeout=2)
                 
-                # 5. Check for crashes (return code != 0 usually indicates a crash like SIGSEGV)
                 if result.returncode != 0:
                     crashes += 1
-                    crash_file = os.path.join(CRASH_DIR, f"crash_{iteration}_{result.returncode}.ape")
+                    stats[strategy]["crashes"] += 1
+                    crash_file = os.path.join(CRASH_DIR, f"crash_{iteration}_{strategy}.ape")
                     os.rename(test_file, crash_file)
-                    print(f"[!] Crash found! Saved to {crash_file}")
+                    print(f"[!] Crash found! Strategy: {strategy} | Saved to {crash_file}")
                 else:
-                    # If it didn't crash, we don't need the test file
                     os.remove(test_file)
                     
             except subprocess.TimeoutExpired:
@@ -131,6 +147,11 @@ def fuzz():
     except KeyboardInterrupt:
         print("\n[*] Fuzzing stopped by user.")
         print(f"[*] Total Iterations: {iteration} | Total Crashes: {crashes}")
+        print("\n[*] Mutation Strategy Effectiveness:")
+        for strat, data in stats.items():
+            if data["attempts"] > 0:
+                success_rate = (data["crashes"] / data["attempts"]) * 100
+                print(f"  - {strat}: {data['crashes']} crashes / {data['attempts']} attempts ({success_rate:.2f}%)")
 
 if __name__ == "__main__":
     if not os.path.exists(CORPUS_DIR):
